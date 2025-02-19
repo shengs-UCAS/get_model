@@ -180,3 +180,44 @@ peak_bed = "cd4_naive.atac.bed" # since all cell types share the same peak set, 
 peaks_motif = query_motif(peak_bed, motif_bed)
 get_motif_output = get_motif(peak_bed, peaks_motif)
 
+create_peak_motif(get_motif_output, "pbmc10k_multiome.zarr", peak_bed)
+celltype_for_modeling = [
+    'cd14_mono',
+    'cd16_mono',
+    'cd4_naive',
+    'cd4_tcm',
+    'cd4_tem',
+    'cd8_naive',
+    'cd8_tem_1',
+    'cd8_tem_2',
+    'intermediate_b',
+    'mait',
+    'memory_b',
+    'naive_b',
+    'treg',
+    'cdc',
+    'gdt',
+    'nk',
+ ]
+
+for cell_type in celltype_for_modeling:
+    add_atpm(
+        "pbmc10k_multiome.zarr",
+        f"{cell_type}.atac.bed",
+        cell_type,
+    )
+
+for cell_type in celltype_for_modeling:
+    add_exp(
+        "pbmc10k_multiome.zarr",
+        f"{cell_type}.rna.csv",
+        f"{cell_type}.atac.bed",
+        cell_type,
+        assembly="hg38",
+        version=44,
+        extend_bp=300, # extend TSS region to 300bp upstream and downstream when overlapping with peaks
+    id_or_name="gene_name", # use gene_name or gene_id to match the gene expression data, checkout your rna.csv file column names, should be either [gene_name, TPM] or [gene_id, TPM]
+)
+
+for file in [peaks_motif, get_motif_output]:
+    os.remove(file)
