@@ -1,30 +1,3 @@
-#!/usr/bin/env python
-# coding: utf-8
-
-#  # Finetune a GET Model on PBMC 10k Multiome
-# 
-# 
-#  This tutorial demonstrates how to train a GET model to predict expression in ATAC-seq peaks using motif information. We'll cover:
-# 
-#  1. Loading and configuring the model
-# 
-#  2. Finetune from a pretrained expression prediction GET model
-# 
-#  3. Perform various analysis using `gcell` package
-# 
-# 
-# 
-#  ## Setup
-# 
-#  First, let's import the necessary modules and set up our configuration.
-#  
-#  Note:
-#  If you run from a Mac, make sure you use the jupyter notebook rather than the VSCode interactive python editor as the later seems to have issue with multiple workers.
-#  If you run from Linux, both should work fine.
-
-# In[1]:
-
-
 from pathlib import Path
 
 import matplotlib.pyplot as plt
@@ -33,28 +6,19 @@ from gcell.utils.causal_lib import get_subnet, plot_comm, preprocess_net
 
 from get_model.config.config import load_config
 from get_model.run_region import run_zarr as run
+import os
 
 
 #  ## Finetune
-# 
-# 
-# 
-#  We'll start by loading a predefined configuration and customizing it for our needs.
-# 
-#  The base configuration is in `get_model/config/finetune_tutorial_pbmc.yaml`
 
 # In[2]:
 
 
 if not Path('./checkpoint-best.pth').exists():
     s3_checkpoint_url = "s3://2023-get-xf2217/get_demo/checkpoints/regulatory_inference_checkpoint_fetal_adult/finetune_fetal_adult_leaveout_astrocyte/checkpoint-best.pth"
-    get_ipython().system(' aws s3 cp $s3_checkpoint_url ./checkpoint-best.pth --no-sign-request')
-
-
-# > Note: In the paper, we mainly used binary ATAC signal trained model for motif interpretation analysis. As it's hard to say whether there are mutual causal relationship between transcription and accessibility. If accessibility is added to the model, potentially it will absorb some TF's effect to itself, thereby making the interpretation more difficult. However, if the goal is to represent the cell states as precisely as possible and use the model for other downstream tasks (e.g. enhancer target prediction), adding the accessibility signal is probably better.
+    os.system(f"aws s3 cp {s3_checkpoint_url} ./checkpoint-best.pth --no-sign-request")
 
 # In[3]:
-
 
 celltype_for_modeling = [
     'memory_b',
@@ -84,7 +48,7 @@ cfg.finetune.checkpoint = "./checkpoint-best.pth" # set the path to the pretrain
 cfg.dataset.leave_out_celltypes = 'cd4_tcm' # set the celltypes you want to leave out
 cfg.machine.num_devices=1 # use 0 for cpu training; >=1 for gpu training
 cfg.machine.batch_size=8 # batch size for training; check `nvidia-smi` to see the available GPU memory
-# cfg.machine.output_dir = "./output/"
+cfg.machine.output_dir = "./output"
 print(f"output path: {cfg.machine.output_dir}/{cfg.run.project_name}/{cfg.run.run_name}")
 print(f"training for {cfg.training.epochs} epochs")
 
@@ -116,15 +80,13 @@ print("The `trainer.checkpoint_callback.best_model_path` variable will be update
 
 # In[7]:
 
-
+os.environ['TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD'] = '1'
 trainer = run(cfg) # run the finetuning, takes around 2 hours on one RTX 3090
+
+
+
+
 print("checkpoint path:", trainer.checkpoint_callback.best_model_path)
-
-
-# # Interpretation
-# 
-# After finetuning, we can use the checkpoint to predict expression of all accessible genes and generate jacobian matrix of (peak x motif) for every predicted genes. 
-# To start, we need to collect the checkpoint we produced and switch to `predict` stage. Here, let's focus on CD4 Naive cell and we need to set `cfg.leave_out_celltypes` to `cd4_naive` for the model to predict gene expression in this cell type.
 
 # In[3]:
 
@@ -148,14 +110,6 @@ export_config(cfg, "exported_interpretation_config.yaml")
 for celltype in ['cd4_naive']:
     cfg.dataset.leave_out_celltypes = celltype
     trainer = run(cfg)
-
-
-
-
-
-# As you can see, the results is now saved to `finetune_pbmc10k_multiome/interpret_training_from_finetune_lora_cd4_tcm_no_chr_split/cd4_naive.zarr`. Now we can use the `GETHydraCellType` class from `gcell` to load it.
-# 
-# ## Load interpretation result as `GETHydraCellType`
 
 # In[89]:
 
